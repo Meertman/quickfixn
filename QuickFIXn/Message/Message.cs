@@ -827,14 +827,14 @@ namespace QuickFix
         {
             this.Header.SetField(new BeginString(sessionID.BeginString));
             this.Header.SetField(new SenderCompID(sessionID.SenderCompID));
-            if (sessionID.SenderSubID != SessionID.NOT_SET)
+            if (SessionID.IsSet(sessionID.SenderSubID))
                 this.Header.SetField(new SenderSubID(sessionID.SenderSubID));
-            if (sessionID.SenderLocationID != SessionID.NOT_SET)
+            if (SessionID.IsSet(sessionID.SenderLocationID))
                 this.Header.SetField(new SenderLocationID(sessionID.SenderLocationID));
             this.Header.SetField(new TargetCompID(sessionID.TargetCompID));
-            if (sessionID.TargetSubID != SessionID.NOT_SET)
+            if (SessionID.IsSet(sessionID.TargetSubID))
                 this.Header.SetField(new TargetSubID(sessionID.TargetSubID));
-            if (sessionID.TargetLocationID != SessionID.NOT_SET)
+            if (SessionID.IsSet(sessionID.TargetLocationID))
                 this.Header.SetField(new TargetLocationID(sessionID.TargetLocationID));
         }
 
@@ -868,22 +868,26 @@ namespace QuickFix
             this.Trailer.Clear();
         }
 
-		[Obsolete("Use the version that takes an encoding as well.")]
-		public override string ToString()
-		{
-			return this.ToString(Encoding.UTF8);
-		}
+        private Object lock_ToString = new Object();
 
-		/// <summary>
-		/// </summary>
-		/// <param name="encoding">The encoding to use for calculating the checksum and the length of the message.</param>
-		/// <returns></returns>
+	[Obsolete("Use the version that takes an encoding as well.")]
+        public override string ToString()
+        {
+            return this.ToString(Encoding.UTF8);
+        }
+
+        /// <summary>
+        /// </summary>
+        /// <param name="encoding">The encoding to use for calculating the checksum and the length of the message.</param>
+        /// <returns></returns>
         public string ToString(Encoding encoding)
         {
-            this.Header.SetField(new BodyLength(BodyLength(encoding)), true);
-			this.Trailer.SetField(new CheckSum(Fields.Converters.CheckSumConverter.Convert(CheckSum(encoding))), true);
-
-            return this.Header.CalculateString() + CalculateString() + this.Trailer.CalculateString();
+            lock (lock_ToString)
+            {
+                this.Header.SetField(new BodyLength(BodyLength(encoding)), true);
+		this.Trailer.SetField(new CheckSum(Fields.Converters.CheckSumConverter.Convert(CheckSum(encoding))), true);
+                return this.Header.CalculateString() + CalculateString() + this.Trailer.CalculateString();
+            }
         }
 
 		[Obsolete("Use the version that takes an encoding as well.")]

@@ -281,13 +281,13 @@ namespace QuickFix
             return _groups[field][num - 1];
         }
 
+        //TODO v2: change this to return void
         /// <summary>
-        /// Gets an instance of a group
+        /// Extracts a repeating-group item into <paramref name="group"/>
         /// </summary>
-        /// <param name="num">index of desired group (starting at 1)</param>
-        /// <param name="group">this var's type is used to determine target group type; retrieved group will be assigned to this var</param>
-        /// <returns>retrieved group</returns>
-        /// <exception cref="FieldNotFoundException" />
+        /// <param name="num">index of desired group item (index starts at 1, not 0)</param>
+        /// <param name="group">group to populate (<c>group.Field</c> is used by this function to extract the group)</param>
+        /// <returns>A redundant reference to <paramref name="group"/><b>Do not use this.  This method will be changed to return void in a future release.</b></returns>
         public Group GetGroup(int num, Group group)
         {
             int tag = group.Field;
@@ -556,7 +556,6 @@ namespace QuickFix
 					total += field.getTotal(encoding);
             }
 
-            // TODO not sure if repeated CheckSum should be included in the total
             foreach (Fields.IField field in this.RepeatedTags)
             {
                 if (field.Tag != Fields.Tags.CheckSum)
@@ -595,7 +594,6 @@ namespace QuickFix
                 }
             }
 
-            // TODO not sure if repeated BeginString/BodyLength/CheckSum should be counted
             foreach (Fields.IField field in this.RepeatedTags)
             {
                 if (field != null
@@ -618,7 +616,10 @@ namespace QuickFix
 
         public virtual string CalculateString()
         {
-            return CalculateString(new StringBuilder(), new int[0]);
+            if( FieldOrder != null )
+                return CalculateString(new StringBuilder(), FieldOrder);
+            else
+                return CalculateString(new StringBuilder(), new int[0]);
         }
 
         public virtual string CalculateString(StringBuilder sb, int[] preFields)
@@ -649,7 +650,6 @@ namespace QuickFix
                 sb.Append(Message.SOH);
             }
 
-            //foreach (List<Group> groupList in _groups.Values)
             foreach(int counterTag in _groups.Keys)
             {
                 if (preFields.Contains(counterTag))

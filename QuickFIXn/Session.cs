@@ -275,6 +275,8 @@ namespace QuickFix
             this.SendLogoutBeforeTimeoutDisconnect = false;
             this.IgnorePossDupResendRequests = false;
             this.RequiresOrigSendingTime = true;
+            this.CheckLatency = true;
+            this.MaxLatency = 120;
 
             if (!IsSessionTime)
                 Reset("Out of SessionTime (Session construction)");
@@ -368,13 +370,15 @@ namespace QuickFix
         /// <returns></returns>
         public bool Send(string message)
         {
+            IResponder responder;
             lock (sync_)
             {
                 if (null == responder_)
                     return false;
-                this.Log.OnOutgoing(message);
-                return responder_.Send(message);
+                responder = responder_;
             }
+            this.Log.OnOutgoing(message);
+            return responder.Send(message);
         }
 
         // TODO for v2 - rename, make internal
@@ -693,6 +697,15 @@ namespace QuickFix
                 logon.GetField(resetSeqNumFlag);
             state_.ReceivedReset = resetSeqNumFlag.Obj;
 
+            if (state_.ReceivedReset)
+            {
+                this.Log.OnEvent("Logon contains ResetSeqNumFlag=Y, reseting sequence numbers to 1");
+                if (!state_.SentReset)
+                {
+                    state_.Reset("Reseting because reset was requested by counterparty.");
+                }
+            }
+
             if (!state_.IsInitiator && this.ResetOnLogon)
                 state_.Reset("ResetOnLogon");
 
@@ -775,7 +788,8 @@ namespace QuickFix
                     int begin = 0;
                     foreach (string msgStr in messages)
                     {
-						Message msg = new Message(msgStr, messageEncoding_);
+                        Message msg = new Message();
+                        msg.FromString(msgStr, true, this.SessionDataDictionary, this.ApplicationDataDictionary, msgFactory_, messageEncoding_);
                         msgSeqNum = msg.Header.GetInt(Tags.MsgSeqNum);
 
                         if ((current != msgSeqNum) && begin == 0)
@@ -794,6 +808,11 @@ namespace QuickFix
                         {
 
                             initializeResendFields(msg);
+                            if(!ResendApproved(msg, SessionID)) 
+                            {
+                                continue;
+                            }
+
                             if (begin != 0)
                             {
                                 GenerateSequenceReset(resendReq, begin, msgSeqNum);
@@ -831,6 +850,19 @@ namespace QuickFix
             {
                 this.Log.OnEvent("ERROR during resend request " + e.Message);
             }
+        }
+        private bool ResendApproved(Message msg, SessionID sessionID)
+        {
+            try
+            {
+                Application.ToApp(msg, sessionID);
+            }
+            catch (DoNotSend)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         protected void NextLogout(Message logout)
@@ -947,7 +979,7 @@ namespace QuickFix
                     }
                 }
 
-                if (CheckLatency && !IsGoodTime(msg))
+                if (!IsGoodTime(msg))
                 {
                     this.Log.OnEvent("Sending time accuracy problem");
                     GenerateReject(msg, FixValues.SessionRejectReason.SENDING_TIME_ACCURACY_PROBLEM);
@@ -1491,6 +1523,9 @@ namespace QuickFix
 
         protected bool IsGoodTime(Message msg)
         {
+            if (!CheckLatency)
+                return true;
+
             var sendingTime = msg.Header.GetDateTime(Fields.Tags.SendingTime);
             System.TimeSpan tmSpan = System.DateTime.UtcNow - sendingTime;
             if (System.Math.Abs(tmSpan.TotalSeconds) > MaxLatency)
@@ -1577,6 +1612,8 @@ namespace QuickFix
 
         protected bool SendRaw(Message message, int seqNum)
         {
+            string messageString;
+
             lock (sync_)
             {
                 string msgType = message.Header.GetField(Fields.Tags.MsgType);
@@ -1602,14 +1639,21 @@ namespace QuickFix
                 }
                 else
                 {
-                    this.Application.ToApp(message, this.SessionID);
+                    try
+                    {
+                        this.Application.ToApp(message, this.SessionID);
+                    }
+                    catch (DoNotSend)
+                    {
+                        return false;
+                    }
                 }
 
-                string messageString = message.ToString(messageEncoding_);
+                messageString = message.ToString(messageEncoding_);
                 if (0 == seqNum)
                     Persist(message, messageString);
-                return Send(messageString);
             }
+            return Send(messageString);
         }
 
         public void Dispose()

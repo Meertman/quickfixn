@@ -76,6 +76,25 @@ namespace QuickFix.Fields
 		}
 
         /// <summary>
+        /// Value equality test
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public override bool Equals(object obj)
+        {
+            if (obj == null || GetType() != obj.GetType())
+                return false;
+
+            FieldBase<T> f = (FieldBase<T>)obj;
+            return this.Tag == f.Tag && this.Obj.Equals(f.Obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return Tag ^ Obj.GetHashCode();
+        }
+
+        /// <summary>
         /// length of formatted field (including tag=val\001)
         /// </summary>
         /// <param name="encoding">The encoding to use for calculating the length of the formatted field.</param>
