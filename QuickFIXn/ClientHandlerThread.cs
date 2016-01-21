@@ -9,17 +9,32 @@ namespace QuickFix
 {
     // TODO v2.0 - consider changing to internal
 
+
     /// <summary>
     /// Created by a ThreadedSocketReactor to handle a client connection.
     /// Each ClientHandlerThread has a SocketReader which reads
     /// from the socket.
     /// </summary>
-    public class ClientHandlerThread : IResponder
+    public class ClientHandlerThread : IResponder, IDisposable
     {
+        internal class ExitedEventArgs : EventArgs
+        {
+            public ClientHandlerThread ClientHandlerThread { get; private set; }
+
+            public ExitedEventArgs(ClientHandlerThread clientHandlerThread)
+            {
+                this.ClientHandlerThread = clientHandlerThread;
+            }
+        }
+
+        internal delegate void ExitedEventHandler(object sender, ClientHandlerThread.ExitedEventArgs e);
+        internal event ExitedEventHandler Exited;
+
+        public long Id { get; private set; }
+
         private Thread thread_ = null;
         private volatile bool isShutdownRequested_ = false;
         private SocketReader socketReader_;
-        private long id_;
         private FileLog log_;
 
         /// <summary>
@@ -56,8 +71,7 @@ namespace QuickFix
             // FIXME - do something more flexible than hardcoding a filelog
             log_ = new FileLog(debugLogFilePath, new SessionID("ClientHandlerThread", clientId.ToString(), "Debug"));
 
-            id_ = clientId;
-
+            this.Id = clientId;
             messageEncoding_ = settingsDict.GetEncoding(SessionSettings.MESSAGE_ENCODING);
             socketReader_ = new SocketReader(tcpClient, socketSettings, this, messageEncoding_);
         }
@@ -98,6 +112,13 @@ namespace QuickFix
             }
 
             this.Log("shutdown");
+            OnExited();
+        }
+
+        protected void OnExited()
+        {
+            if (Exited != null)
+                Exited(this, new ExitedEventArgs(this));
         }
 
         /// FIXME do real logging
@@ -125,9 +146,23 @@ namespace QuickFix
         public void Disconnect()
         {
             Shutdown("Disconnected");
-            socketReader_.Dispose();
         }
 
         #endregion
+
+        public void Dispose()
+        {
+            if (socketReader_ != null)
+            {
+                socketReader_.Dispose();
+                socketReader_ = null;
+            }
+
+            if (log_ != null)
+            {
+                log_.Dispose();
+                log_ = null;
+            }
+        }
     }
 }
